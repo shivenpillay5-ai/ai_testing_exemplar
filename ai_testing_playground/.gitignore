@@ -1,0 +1,32 @@
+# Secrets & local environment
+.env
+*.local
+
+# Playwright / browser session state
+playwright_state.json
+.playwright-mcp/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+venv/
+.venv/
+
+# Reports & artifacts
+reports/*
+!reports/.gitkeep
+*.png
+*.xml
+*.zip
+
+# Generated Word docs — Markdown in docs/ is the single source of truth.
+# Regenerate on demand with: python tools/md_to_docx.py docs/<name>.md <out>.docx
+*.docx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp

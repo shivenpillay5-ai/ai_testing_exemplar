@@ -1,0 +1,73 @@
+# PR validation: run ONLY the tests affected by the changes in a pull request.
+#
+# On Azure DevOps, PR triggers are driven by a Branch Policy, not by this `pr:` block alone:
+#   Repos > Branches > main > Branch policies > Build validation > add this pipeline.
+# The `pr:` block below is honoured by some setups and documents intent either way.
+
+pr:
+  branches:
+    include:
+      - main
+
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - group: ai-testing-playground
+
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: "3.11"
+    displayName: Use Python 3.11
+
+  - script: |
+      python -m pip install --upgrade pip
+      python -m pip install -r requirements.txt
+      python -m playwright install --with-deps chromium
+    displayName: Install dependencies + Chromium
+
+  # Find test files changed against the PR target branch.
+  - script: |
+      set -e
+      git fetch origin $(System.PullRequest.TargetBranch) --depth=1 || true
+      BASE=$(git merge-base HEAD FETCH_HEAD || echo "")
+      if [ -z "$BASE" ]; then
+        echo "No merge base found; running the full suite."
+        echo "app_tests" > changed_tests.txt
+      else
+        git diff --name-only "$BASE" HEAD | grep -E '(^|/)test_.*\.py$' > changed_tests.txt || true
+        if [ ! -s changed_tests.txt ]; then
+          echo "No test files changed; running a light smoke instead."
+          echo "app_tests/tests/Issues/general" > changed_tests.txt
+        fi
+      fi
+      echo "Will run:"; cat changed_tests.txt
+    displayName: Detect affected tests
+
+  - script: |
+      export APP_HEADLESS=true
+      mapfile -t TARGETS < changed_tests.txt
+      pytest "${TARGETS[@]}" --junitxml=reports/results.xml
+    displayName: Run affected tests
+    env:
+      APP_BASE_URL: $(APP_BASE_URL)
+      APP_USERNAME: $(APP_USERNAME)
+      APP_PASSWORD: $(APP_PASSWORD)
+    continueOnError: true
+
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: reports/results.xml
+      failTaskOnFailedTests: true
+    displayName: Publish test results
+
+  - task: PublishBuildArtifacts@1
+    condition: always()
+    inputs:
+      pathToPublish: reports
+      artifactName: pr-test-artifacts
+    displayName: Publish failure traces

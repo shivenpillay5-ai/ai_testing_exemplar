@@ -1,0 +1,59 @@
+# Scheduled run of the test suite on Azure DevOps.
+#
+# This is a STARTER pipeline. Adjust the pool, schedule, and test path for your project.
+# Secrets (APP_BASE_URL / APP_USERNAME / APP_PASSWORD) come from a variable group called
+# "ai-testing-playground" — create it under Pipelines > Library and link it below.
+
+trigger: none            # don't run on every push; this pipeline is schedule-driven
+
+schedules:
+  - cron: "0 2 * * 1"    # 02:00 UTC every Monday
+    displayName: Weekly headless run
+    branches:
+      include:
+        - main
+    always: true
+
+pool:
+  vmImage: ubuntu-latest # swap for a self-hosted Windows pool if your app needs it
+
+variables:
+  - group: ai-testing-playground   # provides APP_BASE_URL, APP_USERNAME, APP_PASSWORD (secret)
+  - name: TEST_PATH
+    value: "app_tests"             # narrow this to a smoke path once the suite grows
+
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: "3.11"
+    displayName: Use Python 3.11
+
+  - script: |
+      python -m pip install --upgrade pip
+      python -m pip install -r requirements.txt
+      python -m playwright install --with-deps chromium
+    displayName: Install dependencies + Chromium
+
+  - script: |
+      export APP_HEADLESS=true
+      pytest "$(TEST_PATH)" --junitxml=reports/results.xml
+    displayName: Run tests (headless)
+    env:
+      APP_BASE_URL: $(APP_BASE_URL)
+      APP_USERNAME: $(APP_USERNAME)
+      APP_PASSWORD: $(APP_PASSWORD)
+    continueOnError: true   # publish results even when tests fail
+
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: reports/results.xml
+      failTaskOnFailedTests: true
+    displayName: Publish test results
+
+  - task: PublishBuildArtifacts@1
+    condition: always()
+    inputs:
+      pathToPublish: reports
+      artifactName: test-artifacts   # traces & screenshots captured on failure live here
+    displayName: Publish reports & failure traces

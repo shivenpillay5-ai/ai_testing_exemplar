@@ -1,0 +1,25 @@
+# Pre-commit hooks for this repo.
+#
+# One-time setup:
+#   python -m pip install pre-commit
+#   pre-commit install
+#
+# After that, the checks below run automatically on every `git commit`. Run them on demand with:
+#   pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: validate-ai-adapters
+        name: Validate AI skill/command wrappers
+        entry: python scripts/validate_ai_adapters.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: check-test-rules
+        name: No asserts/locators in test files
+        entry: python scripts/check_test_rules.py
+        language: system
+        types: [python]
+        files: ^app_tests/tests/.*test_.*\.py$
